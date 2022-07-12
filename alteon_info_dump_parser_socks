@@ -1,0 +1,464 @@
+#!/usr/bin/env python
+
+""" Reads a Alteon output file and returns the VIPs, Server Groups and
+    Real Servers as a complex data structure in the form of a collection
+    of dictionaries.
+"""
+
+# Author: Wayne Bellward
+# Date: 10/07/2022
+
+
+import os
+import sys
+import re
+import copy
+import socket
+import pathlib
+from pprint import pprint
+from datetime import datetime
+
+
+def set_working_dir():
+    """ Function that sets the working directory """
+
+    working_dir = ""
+
+    directory_input = False
+    while not directory_input:
+        working_dir = pathlib.Path(input("Please enter the path to your input"
+                        " file, or 'enter' if it's in the same directory as"
+                        " this program: "))
+        directory_input = pathlib.Path.exists(working_dir)
+        if not directory_input:
+            input("Invalid path or directory, press enter to try again. ")
+            os.system('cls')
+    return working_dir
+
+
+def get_filename(file_path, message):
+    """ Welcome screen and setup for initial parameters including
+        the working directory and input file """
+
+    my_file = None
+    file_input = False
+
+    while not file_input:
+        os.system('cls')
+        print("\nThe specified file must be comma separated")
+        file_name = input(message)
+        my_file = file_path / file_name
+        file_input = pathlib.Path.exists(my_file)
+        if not file_input or file_name == '':
+            file_input = False
+            input("Invalid file name or file does not exist,"
+                  " press enter to try again. ")
+    return my_file
+
+
+def write_dict(final_dict, option):
+    """ Unpack 'socksnap' dictionary and write the virtual server and status info
+        dump to a .csv file
+    """
+
+    now = datetime.now()
+    new_line = ['\n']
+    dt_str = now.strftime('%d-%m-%y_%H%M%S')
+
+    suffix = '_' + dt_str
+
+    filename = input("\n\nPlease enter the name of the file you wish to save without the file extension: ")
+    filename = filename + suffix +'.csv'
+
+    header_snap = ['LB VIP ID', ',', 'LB VIP Name', ',', 'LB VIP IP Addr', ',',
+                   'FW Public IP Addr',]
+
+    header_sock = ['LB VIP ID', ',', 'LB VIP Name', ',', 'LB VIP IP Addr', ',',
+                   'LB VIP Sock Test', ',', 'FW Public IP Addr', ',',
+                   'Public IP Sock Test',]
+
+    header_tail = [',', 'Service Status', ',',
+                   'Service Port', ',', 'RealPort Mapping', ',',
+                   'Real Server_1 Name', ',', 'Real Server_1 IP Addr', ',',
+                   'Real Server_1 State', ',', 'Real Server_2 Name', ',',
+                   'Real Server_2 IP Addr', ',', 'Real Server_2 State', ',',
+                   'Real Server_3 Name', ',', 'Real Server_3 IP Addr', ',',
+                   'Real Server_3 State', ',', 'Real Server_4 Name', ',',
+                   'Real Server_4 IP Addr', ',', 'Real Server_4 State', ',',
+                   'Real Server_5 Name', ',', 'Real Server_5 IP Addr', ',',
+                   'Real Server_5 State', ',', 'Real Server_6 Name', ',',
+                   'Real Server_6 IP Addr', ',', 'Real Server_6 State', ',',
+                   'Real Server_7 Name', ',', 'Real Server_7 IP Addr', ',',
+                   'Real Server_7 State', ',', 'Real Server_8 Name', ',',
+                   'Real Server_8 IP Addr', ',', 'Real Server_8 State', ',',
+                   'Real Server_9 Name', ',', 'Real Server_9 IP Addr', ',',
+                   'Real Server_9 State', ',', 'Real Server_10 Name', ',',
+                   'Real Server_10 IP Addr', ',', 'Real Server_10 State', ',',
+                   'Real Server_11 Name', ',', 'Real Server_11 IP Addr', ',',
+                   'Real Server_11 State', ',','Real Server_12 Name', ',',
+                   'Real Server_12 IP Addr', ',', 'Real Server_12 State',',',
+                   'Real Server_13 Name', ',', 'Real Server_13 IP Addr', ',',
+                   'Real Server_13 state', ',', 'Real Server_14 Name', ',',
+                   'Real Server_14 IP Addr',',', 'Real Server_14 State',',',
+                    '\n']
+              
+    with open(filename, 'w') as file:
+        
+        # Write appropriate header
+        if option == '1':
+            header = header_snap + header_tail
+        elif option == '2':
+            header = header_sock + header_tail
+        file.writelines(header)
+            
+        for virt, params in final_dict.items():
+            virt_id = params['id']
+            vname = params['name']
+            service = params['services']
+            fw_dnat = params['fw_dnat']
+            for svc_num, svc_params in service.items():
+                svc_grp = svc_params['grp']
+                svc_port = svc_params['service_port']
+                svc_rport = svc_params['real_port']
+                svc_state = svc_params['state']
+                realsrv_dict = svc_params['realsrvs']
+                if option == "1":
+                    svc_line = [virt_id, ',', vname, ',', virt, ',',
+                                fw_dnat, ',', svc_state, ',',
+                                svc_num,',', svc_rport, ',']
+                    file.writelines(svc_line)
+                    for srv, params in realsrv_dict.items():
+                        srv_ipaddr = params['ipaddr']
+                        srv_state = params['state']
+                        srv_line = [srv, ',', srv_ipaddr, ',', srv_state, ',']
+                        file.writelines(srv_line)
+                    file.writelines(new_line)
+                elif option == "2":
+                    pub_ip_sock =  svc_params['pub_ip_sock']
+                    vip_ip_sock =  svc_params['vip_ip_sock']
+                    svc_line = [virt_id, ',', vname, ',', virt, ',',
+                                vip_ip_sock, ',', fw_dnat, ',',
+                                pub_ip_sock, ',', svc_state, ',',
+                                svc_num,',', svc_rport, ',']
+                    file.writelines(svc_line)
+                    for srv, params in realsrv_dict.items():
+                        srv_ipaddr = params['ipaddr']
+                        srv_state = params['state']
+                        srv_line = [srv, ',', srv_ipaddr, ',', srv_state, ',']
+                        file.writelines(srv_line)
+                    file.writelines(new_line)
+                
+    print('\nThe file has been written to timestamped "', filename,
+          '" in the local directory', sep = '')
+    print()
+
+
+def reverse_dns(ip_addr):
+    # Reverse DNS Lookup - Resolves IP addresses to FQDN's
+
+    try:
+        my_socket = (ip_addr, 0)
+        host_data = socket.getnameinfo(my_socket, 0)
+        hostname = host_data[0]
+    except socket.gaierror:
+        # handles IP's with no FQDN
+        hostname = "unresolved"
+        
+    return hostname
+
+
+def check_open_port(ipaddr, port):
+    """ Checks to see if the port is open for that service on the load balancer """
+
+    PORT_DICT = {'http': 80,
+                 'https': 443,
+                 'ssh': 22,
+                 'smtp': 25,
+                 'ftp': 21
+                 }
+
+    try:
+        port = int(port)
+    except ValueError:
+        port = PORT_DICT[port]
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        if sock.connect_ex((ipaddr, port)) == 0:
+            sock.settimeout(None)
+            return 'OPEN'
+        else:
+            sock.settimeout(None)
+            return 'CLOSED'
+
+
+def compile_sockdict(snapshot_dict):
+    """ Reads the live VIPs, public IP, local IP and service port, checks if
+        they are open and creates a new snap shot to include the results
+    """
+
+    # Initise varibles
+    public_ip_pattern = re.compile(r"^195.242.12[2-3].[0-9]{1,3}$")
+
+    # Make a deepcopy to update while interating over the original
+    socksnap = copy.deepcopy(snapshot_dict)
+
+    for virt, virt_params in snapshot_dict.items():
+        services = virt_params['services']
+        # Iterate through services
+        for service, svc_params in services.items():
+            # If service is up grab public IP and service port
+            if svc_params['state'] == 'UP':
+                # Grab service port and convert name to number if required
+                service_port = svc_params['service_port']
+                # Grab public IP
+                public_ip = virt_params['fw_dnat']
+                # Check public IP socket and update snapshot dictionary
+                if re.match(public_ip_pattern, public_ip):
+                    pub_result = check_open_port(public_ip, service_port)
+                    socksnap[virt]['services'][service]['pub_ip_sock'] = pub_result
+                else:
+                    socksnap[virt]['services'][service]['pub_ip_sock'] = 'none'
+
+                # Check local VIP IP socket and update snapshot dictionary
+                vip_result = check_open_port(virt, service_port)
+                socksnap[virt]['services'][service]['vip_ip_sock'] = vip_result
+            else:
+                socksnap[virt]['services'][service]['vip_ip_sock'] = 'none'
+                socksnap[virt]['services'][service]['pub_ip_sock'] = 'none'
+                        
+
+    return socksnap
+                    
+  
+                        
+
+def extract_virt(line):
+    """ Extracts the vip information from the initial line """
+
+    line = line.strip()
+    virt_cut = line.split()
+    virt_id = virt_cut[0].strip(':')
+    virt_ip = virt_cut[2].strip(',')
+    try:
+        virt_name = virt_cut[5].strip(',')
+    except IndexError:
+        virt_name = 'none'
+    virt_info = {virt_ip: {'id': virt_id,
+                           'name': virt_name,
+                           'fw_dnat': {},
+                           'services': {}}}
+    return virt_ip, virt_info
+
+
+def extract_service(line):
+    """ Extracts the service information from the line """
+
+    line = line.strip()
+    service_cut = line.split()
+    service_port = service_cut[0].strip(':')
+    real_port = service_cut[2].strip(',')
+    service_grp = service_cut[4].strip(',')
+    service_desc = service_cut[5].strip(',')
+    service_info = {service_port: {'service_port': service_port,
+                                   'real_port': real_port,
+                                   'grp': service_grp,
+                                   'service_desc': service_desc,
+                                   'state': 'NO SERVICES UP',
+                                   'realsrvs': {}}}
+                                   
+    return service_port, service_info
+
+
+def extract_realsrv(line):
+    """ Extracts the real server information from the line """
+
+    line = line.strip()
+    realsrv_cut = line.split()
+    realsrv_id = realsrv_cut[0].strip(':')
+    realsrv_ipaddr = realsrv_cut[1].strip(',')
+    realsrv_name = realsrv_cut[2].strip(',')
+
+    state_match = re.search(r'(?P<state>\S+)$', line)
+    realsrv_state = state_match.groupdict()['state']
+    realsrv_info = {realsrv_name: {'id': realsrv_id,
+                                   'ipaddr': realsrv_ipaddr,
+                                   'name': realsrv_name,
+                                   'state': realsrv_state}}
+                                   
+    return realsrv_info
+
+
+def capture_fwvip(fwvip_list):
+    """ Processes the firewall vip object configuration list and passes it back as
+        a dictionary data structure """
+
+    # Intialise varibles
+    fwvip_dict = {}
+
+    # Iterate through entire firewall configuration list
+    for line in fwvip_list:
+        # Capture vip name
+        if re.search('^edit\s', line):
+            name_match = re.search(r'^edit\s"(?P<name>.+)"$', line)
+            fwvip_name = name_match.groupdict()['name']
+            
+        # Capture dnat ip address
+        elif 'set extip' in line:
+            dnat_cut = line.split()
+            dnat_ip = dnat_cut[2]
+            dnat_ip = str(dnat_ip)
+        # Capture real/mapped ip address
+        elif 'set mappedip' in line:
+            real_cut = line.split('"')
+            real_ip = real_cut[1]
+            real_ip = str(real_ip)
+        # At the end on each vip entry update the main dictionary
+        elif 'next' in line:
+            fwvip_dict.update({fwvip_name: {dnat_ip: real_ip}})
+
+    return fwvip_dict
+
+
+def combine_data(dump_dict, fwvip_dict):
+    """ Assigns the FW DNAT to the associated Alteon VIP """
+    
+
+    # Initialise varibles
+    dnat = ''
+
+    # Iterate through a copy of the dump dictionary
+    for virt, virt_params in dump_dict.copy().items():
+        # Iterate through firewall vip dict to find destination NAT
+        for fwvip_name, mapping in fwvip_dict.items():
+            for public, private in mapping.items():
+                if virt == private:
+                    dnat = public
+                if not public:
+                    dnat = 'none'
+
+        # Determine and set service state
+        for svc_port, svc_params in virt_params['services'].items():
+            for srv_name, srv_details in svc_params['realsrvs'].items():
+                if srv_details['state'] == 'UP':
+                    svc_params['state'] = 'UP'
+       
+        # Update the dump dictionary with the firewall dnat for that virt ip
+        dump_dict[virt]['fw_dnat'] = dnat
+        dnat = ''
+
+    return dump_dict
+        
+
+def capture_info(dump_file):
+    """ Function iterates through the dump file and compiles a
+        complex data structure from the required information elements """
+
+    # Intialise varibles
+    virt_dict = {}
+    fwvip_list = []
+    capture = False
+
+    # Start and end patterns
+    virtual_srv_section_pattern = re.compile(r"^Virtual server state:$")
+    virt_start_pattern = re.compile(r"^\d+:\sIP4\s")
+    service_start_pattern = re.compile(r"^\s{4}\S+\srport")
+    realsrvs_start_pattern = re.compile(r"^\s{8}\d+:\s[0-9]{1,3}\.[0-9]{1,3}\.")
+    fwvip_start_pattern = re.compile(r"^config firewall vip$")
+    virtend_pattern = re.compile(r"^IDS group state:$")
+    fwvipend_pattern = re.compile(r"^END$")
+
+    with open(dump_file) as dump_file:
+        # Interate through dump file and compile complex data structure
+        for line in dump_file:
+                
+            # Identify start and end points for capturing virtual server
+            # and firewall VIP info
+            
+            if re.match(virtual_srv_section_pattern, line):
+                capture = 'virt'
+            elif re.match(fwvip_start_pattern, line):
+                    capture = 'fwvip'
+
+            if capture == 'virt':
+                # Start capturing general VIP info
+                if re.match(virt_start_pattern, line):
+                    vip_ip, virt_info = extract_virt(line) 
+                    virt_dict.update(virt_info)
+                    
+                # Start service info
+                elif re.match(service_start_pattern, line):
+                    service_port, service_info = extract_service(line)
+                    virt_dict[vip_ip]['services'].update(service_info)
+                    service_info = {}
+                    
+                # Start capturing address object configuration
+                elif re.match(realsrvs_start_pattern, line):
+                    realsrv_info = extract_realsrv(line)
+                    virt_dict[vip_ip]['services'][service_port]['realsrvs'].update(realsrv_info)
+                    realsrv_info = {}
+
+                # End capturing at the end of the virtual server state section
+                elif re.match(virtend_pattern, line):
+                    capture = False
+
+            elif capture == 'fwvip':
+                line = line.strip()
+                fwvip_list.append(line)
+
+                # End capturing at the end of the firewall vip section
+                if re.match(fwvipend_pattern, line):
+                    capture = False
+                    
+    # Resolve firewall config list to a dictionary
+    fwvip_dict = capture_fwvip(fwvip_list)
+            
+    return virt_dict, fwvip_dict
+
+
+def main_menu():
+    # Setup Main Menu Loop
+
+    os.system('cls')
+    mm_choice = None
+    while mm_choice != "q":
+        print(
+            """
+            Main Menu
+            Q - Quit.
+            1 - Create Alteon Enabled VIP Status Snapshot.
+            2 - Check and Print Socket Status of Live VIPs.
+            """
+        )
+
+        mm_choice = input("Choice: ").lower()
+        print()
+        return mm_choice
+
+
+def main():
+    """ Main Program, used when the module is run directly as a script """
+    
+    # Gather file path and name
+    file_path = set_working_dir()
+    dump_message = ("\nEnter the full filename containing the Alteon"
+                    " SLB dump file: ")
+    dump_file_name = get_filename(file_path, dump_message)
+
+    # Parse the file creating complex data structure of the VIP info & status
+    dump_dict, fwvip_dict = capture_info(dump_file_name)
+    snapshot_dict = combine_data(dump_dict, fwvip_dict)
+
+    mm_val = None
+    while mm_val != "q":
+        mm_val = main_menu()
+        if mm_val == "1":
+            # Create .csv status snapshot file of enabled VIPs
+            write_dict(snapshot_dict, mm_val)
+        elif mm_val == "2":
+            # Checks if socket is open on each live Public IP & Local VIP
+            socksnap = compile_sockdict(snapshot_dict)
+            write_dict(socksnap, mm_val)
+            
+            
+main()
