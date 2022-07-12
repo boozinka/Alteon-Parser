@@ -226,12 +226,9 @@ def compile_sockdict(snapshot_dict):
             else:
                 socksnap[virt]['services'][service]['vip_ip_sock'] = 'none'
                 socksnap[virt]['services'][service]['pub_ip_sock'] = 'none'
-                        
-
+                
     return socksnap
-                    
-  
-                        
+
 
 def extract_virt(line):
     """ Extracts the vip information from the initial line """
